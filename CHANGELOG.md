@@ -1,5 +1,12 @@
 # @googleworkspace/cli
 
+## 0.6.1
+
+### Patch Changes
+
+- 88cb65c: chore: add automation workflow for auto-fmt, CLA labeling, and file-based PR triage
+- cb1f988: Add Content-Length: 0 header for POST/PUT/PATCH requests with no body to fix HTTP 411 errors
+
 ## 0.6.0
 
 ### Minor Changes
