@@ -358,33 +358,34 @@ async fn load_credentials_inner(
                 return parse_credential_file(enc_path, &json_str).await;
             }
             Err(e) => {
-                // Decryption failed — the encryption key likely changed (e.g. after
-                // an upgrade that migrated keys between keyring and file storage).
-                // Remove the stale file so the next `gws auth login` starts fresh,
-                // and fall through to other credential sources (plaintext, ADC).
+                // Decryption failed. Common causes:
+                //
+                // - Keyring backend mismatch
+                //   (`GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND` differs from
+                //   the value used at write time).
+                // - File moved between machines; per-machine keychain
+                //   entry isn't present here.
+                // - Encryption key rotated or lost.
+                //
+                // The file IS recoverable if the user supplies the
+                // right key (switch backend, copy
+                // `.encryption_key`, restore keychain item, etc.).
+                // Auto-deleting forecloses recovery and forces a
+                // re-auth round-trip the user didn't choose. Surface
+                // a clear error and leave the file in place. Caller
+                // falls through to other credential sources (plaintext,
+                // ADC); explicit `gws auth login` overwrites the file
+                // when the user opts to.
                 eprintln!(
-                    "Warning: removing undecryptable credentials file ({}): {e:#}",
+                    "Warning: cannot decrypt credentials at {}: {e:#}\n\
+                     Common causes: keyring backend mismatch \
+                     (GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND), file moved between machines, \
+                     or encryption key rotated. File left in place so you can recover the \
+                     key if possible. Run `gws auth login` to overwrite, or delete \
+                     {} manually if you want a fresh start.",
+                    enc_path.display(),
                     enc_path.display()
                 );
-                if let Err(err) = tokio::fs::remove_file(enc_path).await {
-                    eprintln!(
-                        "Warning: failed to remove stale credentials file '{}': {err}",
-                        enc_path.display()
-                    );
-                }
-                // Also remove stale token caches that used the old key.
-                for cache_file in ["token_cache.json", "sa_token_cache.json"] {
-                    let path = enc_path.with_file_name(cache_file);
-                    if let Err(err) = tokio::fs::remove_file(&path).await {
-                        if err.kind() != std::io::ErrorKind::NotFound {
-                            eprintln!(
-                                "Warning: failed to remove stale token cache '{}': {err}",
-                                path.display()
-                            );
-                        }
-                    }
-                }
-                // Fall through to remaining credential sources below.
             }
         }
     }
